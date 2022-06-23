@@ -123,12 +123,8 @@ int main (int argc, char **argv, char **envp)
    fila0 = NULL ;
    for (i=0; i<N; i++)
    {
-      //printf("%d \n",queue_size ((queue_t*) fila0));
-      //printf("%d \n",i);
       assert (queue_size ((queue_t*) fila0) == i) ;
       queue_append ((queue_t **) &fila0, (queue_t*) &item[i]) ;
-      //if(fila0 != NULL)
-      //   printf("O bagulho ta nulo ainda \n ");
       assert (fila_correta (fila0)) ;
    }
 

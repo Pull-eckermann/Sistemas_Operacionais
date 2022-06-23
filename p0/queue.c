@@ -5,7 +5,6 @@
 
 //------------------------------------------------------------------------------
 // Conta o numero de elementos na fila
-// Retorno: numero de elementos na fila
 
 int queue_size (queue_t *queue){
     int cont = 0;
@@ -20,24 +19,31 @@ int queue_size (queue_t *queue){
 }
 
 //------------------------------------------------------------------------------
-// Percorre a fila e imprime na tela seu conteúdo. A impressão de cada
-// elemento é feita por uma função externa, definida pelo programa que
-// usa a biblioteca. Essa função deve ter o seguinte protótipo:
-//
-// void print_elem (void *ptr) ; // ptr aponta para o elemento a imprimir
+// Percorre a fila e imprime na tela seu conteúdo.
 
 void queue_print (char *name, queue_t *queue, void print_elem (void*)){
+    // Imprime "Saida Gerada"
+    printf("%s: ",name);
+    queue_t *andarilho = queue;
 
-
+    // Se a fila estiver vazia imprime somente "[]"
+    if (andarilho == NULL)
+        printf("[]");
+    else{
+    //Caso contrário faz o processo de impressão normal
+        printf("[");
+        do{
+            print_elem(andarilho);
+            andarilho = andarilho->next;
+            if(andarilho != queue)
+                printf(" ");
+        }while(andarilho != queue);
+        printf("]");
+    }
+    printf("\n");
 }
-
 //------------------------------------------------------------------------------
 // Insere um elemento no final da fila.
-// Condicoes a verificar, gerando msgs de erro:
-// - a fila deve existir
-// - o elemento deve existir
-// - o elemento nao deve estar em outra fila
-// Retorno: 0 se sucesso, <0 se ocorreu algum erro
 
 int queue_append (queue_t **queue, queue_t *elem){
 
@@ -53,7 +59,7 @@ int queue_append (queue_t **queue, queue_t *elem){
     }
     //Confere se o elemente a ser incerido não pertence a outra fila
     if((elem->next != NULL) || (elem->prev != NULL)){
-        fprintf(stderr,"O elemento pertence a outra fila\n");
+        fprintf(stderr,"O elemento ja pertence a uma fila\n");
         return 3;
     }
 
@@ -75,12 +81,6 @@ int queue_append (queue_t **queue, queue_t *elem){
 }
 //------------------------------------------------------------------------------
 // Remove o elemento indicado da fila, sem o destruir.
-// Condicoes a verificar, gerando msgs de erro:
-// - a fila deve existir
-// - a fila nao deve estar vazia
-// - o elemento deve existir
-// - o elemento deve pertencer a fila indicada
-// Retorno: 0 se sucesso, <0 se ocorreu algum erro
 
 int queue_remove (queue_t **queue, queue_t *elem){
 
@@ -105,7 +105,7 @@ int queue_remove (queue_t **queue, queue_t *elem){
     do{
         //Se pertencer realiza o processo de remoção
         if(aux == elem){
-            //Esse é o caso em que a fila possuí 1 elementp
+            //Esse é o caso em que a fila possuí 1 elemento
             if(elem->next == elem || elem->prev == elem){
                 elem->next = NULL;
                 elem->prev = NULL;
