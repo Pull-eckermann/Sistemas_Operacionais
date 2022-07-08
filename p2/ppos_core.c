@@ -22,6 +22,11 @@ void ppos_init (){
 
 // Cria uma nova tarefa. Retorna um ID> 0 ou erro.
 int task_create (task_t *task, void (*start_func)(void *), void *arg){
+  if (task == NULL){
+    fprintf(stderr,"ERRO: ponteiro para tarefa a ser criada é nulo");
+    return 2;
+  }
+
   char *stack ;
   task->next = NULL;
   task->prev = NULL;
@@ -60,6 +65,10 @@ void task_exit (int exit_code){
 
 // alterna a execução para a tarefa indicada
 int task_switch (task_t *task){
+  if(task == NULL){
+    fprintf(stderr,"ERRO: ponteiro para tarefa é nulo");
+    return 3;
+  }
   task_t *atual;
   atual = current;
   current = task;
