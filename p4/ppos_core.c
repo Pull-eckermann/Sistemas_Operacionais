@@ -15,12 +15,44 @@ task_t despachante;       //Tarefa do despatcher
 task_t *current = NULL;   //Ponteiro que aponta para a tarefa corrente
 task_t *tarefas = NULL;   //Ponteiro para a lista de tarefas
 
-//Schaduler com política FCFS implementada
+//Schaduler com política por prioridades dinâmicas implementada
 task_t * schaduler(){
-  task_t *aux = tarefas;
-  tarefas->status = 3; //Status = 3 "EXECUTANDO"
-  tarefas = tarefas->next;
-  return aux;
+  task_t *aux;
+  task_t *stressed = tarefas;
+  //Acha a tarefa com maior prioridade dinãmica
+  for(aux = tarefas->next; aux != tarefas; aux = aux->next)
+    if (aux->dinamic_prio < stressed->dinamic_prio)
+      stressed = aux;
+
+  aux = tarefas;
+  do{ //Diminui prioridades dinâmincas em 1 em todas as tarefas
+    aux->dinamic_prio --;
+    aux = aux->next;
+  }while(aux != tarefas);
+  
+  stressed->dinamic_prio = stressed->static_prio;
+  stressed->status = 3; //Status = 3 "EXECUTANDO"
+  tarefas = stressed;
+  return stressed;
+}
+
+// define a prioridade estática de uma tarefa (ou a tarefa atual)
+void task_setprio (task_t *task, int prio){
+  if((prio < -20) || (prio > 20)){
+    fprintf(stderr,"Erro: Prioridade deve estar entre -20 e +20\n");
+    exit(10);
+  }
+  if(task == NULL)
+    current->static_prio = prio;
+  else
+    task->static_prio = prio;
+}
+
+// retorna a prioridade estática de uma tarefa (ou a tarefa atual)
+int task_getprio (task_t *task){
+  if(task == NULL)
+    return current->static_prio;
+  return task->static_prio;
 }
 
 void dispatcher (){
@@ -66,11 +98,13 @@ int task_create (task_t *task, void (*start_func)(void *), void *arg){
     fprintf(stderr,"ERRO: ponteiro para tarefa a ser criada é nulo");
     return 2;
   }
-  char *stack ;
+  user_tasks ++;
+  current = task;
   queue_append((queue_t**) &tarefas, (queue_t*) task);     //Adiciona a tarefa à lista de tarefas
   getcontext(&task->context);
 
   //Cria a pilha da tarefa
+  char *stack ;
   stack = malloc (STACKSIZE) ;
   if (stack){
     task->context.uc_stack.ss_sp = stack ;
@@ -82,17 +116,18 @@ int task_create (task_t *task, void (*start_func)(void *), void *arg){
     perror ("Erro na criação da pilha: ") ;
     exit (1) ;
   }
+  
   //Seta parâmetros do contexto
-  user_tasks ++;
-  current = task;
   makecontext(&task->context, (void*) (*start_func), 1, arg);
-  //Soma 1 no contador do ID e atribui esse id à tarefa criada
+  //Seta parâmetros da tarefa
   cont_id ++;
   task->id = cont_id;
   task->status = 2; // Status = 2 "PRONTA"
+  task_setprio (task, 0);
+  task->dinamic_prio = task->static_prio;
+
   //Tarefa corrente volta a ser a main
   current = &main_cont;
-
   return cont_id;
 }
 
