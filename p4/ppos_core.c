@@ -42,10 +42,13 @@ void task_setprio (task_t *task, int prio){
     fprintf(stderr,"Erro: Prioridade deve estar entre -20 e +20\n");
     exit(10);
   }
-  if(task == NULL)
+  if(task == NULL){
     current->static_prio = prio;
-  else
+    current->dinamic_prio = prio;
+  }else{
     task->static_prio = prio;
+    task->dinamic_prio = prio;
+  }
 }
 
 // retorna a prioridade estática de uma tarefa (ou a tarefa atual)
@@ -100,6 +103,7 @@ int task_create (task_t *task, void (*start_func)(void *), void *arg){
   }
   user_tasks ++;
   current = task;
+  task_setprio (task, 0);
   queue_append((queue_t**) &tarefas, (queue_t*) task);     //Adiciona a tarefa à lista de tarefas
   getcontext(&task->context);
 
@@ -123,7 +127,6 @@ int task_create (task_t *task, void (*start_func)(void *), void *arg){
   cont_id ++;
   task->id = cont_id;
   task->status = 2; // Status = 2 "PRONTA"
-  task_setprio (task, 0);
   task->dinamic_prio = task->static_prio;
 
   //Tarefa corrente volta a ser a main
