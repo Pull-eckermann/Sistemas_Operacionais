@@ -9,8 +9,8 @@
 
 int cont_id = 0;
 int user_tasks = 0;
+short big_lock = 0;	//Trava preempções em funções de sistema
 unsigned int mile_clock = 0; //Contador de milesegundos
-unsigned int prev_clock = 0; //Marcador de início das tarefas
 task_t main_cont;         //Tarefa Main
 task_t despachante;       //Tarefa do despatcher 
 task_t *current = NULL;   //Ponteiro que aponta para a tarefa corrente
@@ -24,9 +24,19 @@ struct itimerval timer;     // estrutura de inicialização to timer
 unsigned int systime (){
   return mile_clock;
 }
+//-----------------------------------------------------------------------------
+//Funções que administram a trava de preempção
+void lock(){
+  big_lock = 1;
+}
+
+void unlock(){
+  big_lock = 0;
+}
 //------------------------------------------------------------------------------
 //Schaduler com política por prioridades dinâmicas implementada
 task_t * schaduler(){
+  lock();
   task_t *aux;
   task_t *stressed = tarefas;
   //Acha a tarefa com maior prioridade dinãmica
@@ -43,11 +53,13 @@ task_t * schaduler(){
   stressed->dinamic_prio = stressed->static_prio;
   stressed->status = 3; //Status = 3 "EXECUTANDO"
   tarefas = stressed;
+  unlock();
   return stressed;
 }
 //------------------------------------------------------------------------------
 // define a prioridade estática de uma tarefa (ou a tarefa atual)
 void task_setprio (task_t *task, int prio){
+  lock();
   if((prio < -20) || (prio > 20)){
     fprintf(stderr,"Erro: Prioridade deve estar entre -20 e +20\n");
     exit(10);
@@ -59,6 +71,7 @@ void task_setprio (task_t *task, int prio){
     task->static_prio = prio;
     task->dinamic_prio = prio;
   }
+  unlock();
 }
 //------------------------------------------------------------------------------
 // retorna a prioridade estática de uma tarefa (ou a tarefa atual)
@@ -94,8 +107,9 @@ void task_yield (){
 //------------------------------------------------------------------------------
 // tratador do sinal do timer
 void tratador_ticks (int signum){
-  mile_clock++;                     // mile_clock incrementa a cada milesegundo
-  if(current->preemptable == 1){ // verifica se a tarefa pode ser preemptada 
+  mile_clock++;                  // mile_clock incrementa a cada milesegundo
+  current->processor_time++;
+  if(current->preemptable == 1 && !big_lock){ // verifica se a tarefa pode ser preemptada 
     current->quantum --;
     if(current->quantum <= 0)
       task_yield();              //Se o quantum chegar a 0 volta para o dispatcher
@@ -121,19 +135,15 @@ void ppos_init (){
   action.sa_handler = tratador_ticks ;
   sigemptyset (&action.sa_mask) ;
   action.sa_flags = 0 ;
-  if (sigaction (SIGALRM, &action, 0) < 0)
-  {
+  if (sigaction (SIGALRM, &action, 0) < 0){
     perror ("Erro em sigaction: ") ;
     exit (1) ;
   }
   // ajusta valores do temporizador
   timer.it_value.tv_usec = 1000;   // primeiro disparo, em micro-segundos
-  timer.it_value.tv_sec  = 0;      // primeiro disparo, em segundos
   timer.it_interval.tv_usec = 1000;   // disparos subsequentes, em micro-segundos
-  timer.it_interval.tv_sec  = 0;   // disparos subsequentes, em segundos
   // arma o temporizador ITIMER_REAL (vide man setitimer)
-  if (setitimer (ITIMER_REAL, &timer, 0) < 0)
-  {
+  if (setitimer (ITIMER_REAL, &timer, 0) < 0){
     perror ("Erro em setitimer: ") ;
     exit (1) ;
   }
@@ -141,6 +151,7 @@ void ppos_init (){
 //------------------------------------------------------------------------------
 // Cria uma nova tarefa. Retorna um ID> 0 ou erro.
 int task_create (task_t *task, void (*start_func)(void *), void *arg){
+  lock();
   if (task == NULL){
     fprintf(stderr,"ERRO: ponteiro para tarefa a ser criada é nulo");
     return 2;
@@ -157,7 +168,7 @@ int task_create (task_t *task, void (*start_func)(void *), void *arg){
   task->status = 2; // Status = 2 "PRONTA"
   task->activations = 1;
   task->processor_time = 0;
-  task->execution_time = mile_clock;
+  task->execution_time = systime();
   if (task->id != 1)
     task->preemptable = 1;  //Se não for o dispatcher indica que é preemtavel
 
@@ -180,16 +191,19 @@ int task_create (task_t *task, void (*start_func)(void *), void *arg){
 
   //Tarefa corrente volta a ser a main
   current = &main_cont;
+  unlock();
   return cont_id;
 }
 //------------------------------------------------------------------------------
 // Termina a tarefa corrente voltando a tarefa anterior, indicando um valor de status encerramento
 void task_exit (int exit_code){
+  lock();
   user_tasks --;
   current->status = 1;  //status 1 = TERMINADA
   current->execution_time = mile_clock - current->execution_time;   //Calcula tempo de execução total
   printf("Task %d exit: execution time %d ms, processor time %d ms, %d activations\n",current->id,
                                         current->execution_time, current->processor_time, current->activations);
+  unlock();
   if(current->id > 1)   //Indica que a tarefa foi criada depois do dispatcher
     task_switch(&despachante);
   else
@@ -199,20 +213,20 @@ void task_exit (int exit_code){
 //------------------------------------------------------------------------------
 // alterna a execução para a tarefa indicada
 int task_switch (task_t *task){
+  lock();
   task_t *prev;
   if(task == NULL){
     fprintf(stderr,"ERRO: ponteiro para tarefa é nulo");
     return 3;
   }
   current->activations++;   //Incrementa numero de ativações da tarefa
-  current->processor_time += mile_clock - prev_clock;   //Tempo de processador recebe a diferenças dos relógios
   prev = current;
   current = task;
-  prev_clock = systime();   //Marca o tempo de início da nova task
+  unlock(); 
   swapcontext(&prev->context, &task->context);
 
   return 0; 
-} 
+}
 //------------------------------------------------------------------------------
 // retorna o identificador da tarefa corrente (main_cont deve ser 0)
 int task_id (){
