@@ -72,6 +72,7 @@ int task_getprio (task_t *task){
 //Schaduler com política por prioridades dinâmicas implementada
 task_t * schaduler(){
   lock();
+  //Caso a fila estiver vazia retorna NULL
   if(tarefas == NULL)
     return NULL;
 
@@ -100,17 +101,23 @@ void dispatcher (){
   task_t *aux;
 
   while(user_tasks > 0){
-    aux = dormitorio;
-    if(dormitorio != NULL){
-      do{
-        if(aux->despertar < systime())
-          task_resume(aux, &dormitorio);
-        aux = aux->next;
-      }while( aux != dormitorio);
-    }
-    
     proxima = schaduler();    //Acha a próxima tarefa a ser executada
-    if(proxima != NULL){
+    
+    do{   //Percorre a lista de tarefas dormindo e libera quem já passou o tempo  
+      if(dormitorio != NULL){
+        aux = dormitorio;
+        do{
+          if(aux->despertar <= systime()){
+            aux = aux->next;
+            task_resume(aux->prev, &dormitorio);
+            break;
+          }
+          aux = aux->next;
+        }while(aux!=dormitorio && dormitorio);
+      }
+    }while(aux!=dormitorio && dormitorio);
+
+    if(proxima != NULL){      //Caso em que a fila não estava vazia
       proxima->quantum = QUANTUM;
       task_switch(proxima);
       if(proxima->status == TERMINADA){   //Status "TERMINADA"
