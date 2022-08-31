@@ -361,7 +361,7 @@ int sem_down(semaphore_t *s){
 //------------------------------------------------------------------------------
 // libera o semáforo
 int sem_up(semaphore_t *s){
-  if(s && (s->destruido == 0)) {
+  if(s && !s->destruido) {
     enter_sc(&a_lock);  //Controla acesso à seção crítica
     s->t_count ++;
     leave_sc(&a_lock);
@@ -391,6 +391,7 @@ int mqueue_create (mqueue_t *queue, int max, int size){
   //Fila de mensagens se inicia nula
   queue->msg_q = NULL;
   queue->tam = size;
+  queue->destruido = 0;
 
   //Cria semáforos e confere se deu erro
   if(sem_create (&queue->s_buffer, 1) == -1)
@@ -405,59 +406,74 @@ int mqueue_create (mqueue_t *queue, int max, int size){
 //------------------------------------------------------------------------------
 // envia uma mensagem para a fila
 int mqueue_send (mqueue_t *queue, void *msg){
-  //Confere se deu erro ao down ou se o semáforo foi destruído
-  if(sem_down (&queue->s_vaga) == -1)
-    return -1;
-  if(sem_down (&queue->s_buffer) == -1)
-    return -1;
-  
-  //Aloca mensagem e adiciona na fila
-  buffer *mensagem = malloc(sizeof(buffer));
-  if (!mensagem){ //Erro no malloc
+  lock();
+  if(!queue->destruido && queue){
+    //Confere se deu erro ao down ou se o semáforo foi destruído
+    if(sem_down (&queue->s_vaga) == -1){
+      unlock();
+      return -1;
+    }
+    if(sem_down (&queue->s_buffer) == -1){
+      unlock();
+      return -1;
+    }  
+    //Aloca mensagem e adiciona na fila
+    buffer *mensagem = malloc(sizeof(buffer));
+    if (!mensagem){ //Erro no malloc
+      sem_up (&queue->s_buffer);
+      sem_up (&queue->s_item);
+      unlock();
+      return -1;
+    }
+    mensagem->prev = NULL;
+    mensagem->next = NULL;
+    bcopy(msg, &mensagem->product, queue->tam);
+    queue_append((queue_t**) &queue->msg_q, (queue_t*) mensagem);
+
+    //Libera semáforos
     sem_up (&queue->s_buffer);
     sem_up (&queue->s_item);
-    return -1;
+    unlock();
+    return 0;
   }
-  mensagem->prev = NULL;
-  mensagem->next = NULL;
-  bcopy(msg, &mensagem->product, queue->tam);
-  queue_append((queue_t**) &queue->msg_q, (queue_t*) mensagem);
-
-  //Libera semáforos
-  sem_up (&queue->s_buffer);
-  sem_up (&queue->s_item);
-  return 0;
+  unlock();
+  return -1;
 }
 //------------------------------------------------------------------------------
 // recebe uma mensagem da fila
 int mqueue_recv (mqueue_t *queue, void *msg){
-  //Confere se deu erro ao down ou se o semáforo foi destruído 
-  if(sem_down (&queue->s_item) == -1)
-    return -1;
-  if(sem_down (&queue->s_buffer) == -1)
-    return -1;
-  
-  //Retira da fila a primeira mensagem disponível
-  buffer *mensagem = queue->msg_q;
-  queue_remove((queue_t**) &queue->msg_q, (queue_t*) queue->msg_q);
-  bcopy(&mensagem->product, msg, queue->tam);
-  free(mensagem);
+  lock();
+  if(!queue->destruido && queue){
+    //Confere se deu erro ao down ou se o semáforo foi destruído 
+    if(sem_down (&queue->s_item) == -1){
+      unlock();
+      return -1;
+    }
+    if(sem_down (&queue->s_buffer) == -1){
+      unlock();	  
+      return -1;
+    }
+    //Retira da fila a primeira mensagem disponível
+    buffer *mensagem = queue->msg_q;
+    queue_remove((queue_t**) &queue->msg_q, (queue_t*) queue->msg_q);
+    bcopy(&mensagem->product, msg, queue->tam);
+    free(mensagem);
 
-  //Libera semáforos
-  sem_up (&queue->s_buffer);
-  sem_up (&queue->s_vaga);
-  return 0;
+    //Libera semáforos
+    sem_up (&queue->s_buffer);
+    sem_up (&queue->s_vaga);
+    unlock();
+    return 0;
+  }
+  unlock();
+  return -1;
 }
 //------------------------------------------------------------------------------
 // destroi a fila, liberando as tarefas bloqueadas
 int mqueue_destroy (mqueue_t *queue){
   if(!queue)
     return -1;
-  //Destrói os semáforos
-  sem_destroy(&queue->s_buffer);
-  sem_destroy(&queue->s_item);
-  sem_destroy(&queue->s_vaga);
-
+  lock();
   //Libera mensagens na fila um por um
   buffer *destruir; 
   while(queue->msg_q){
@@ -466,17 +482,24 @@ int mqueue_destroy (mqueue_t *queue){
     free(destruir);
   }
   free(queue->msg_q);
-
+  queue->destruido = 1;
+  //Destrói os semáforos
+  sem_destroy(&queue->s_buffer);
+  sem_destroy(&queue->s_item);
+  sem_destroy(&queue->s_vaga);
+  unlock();
   return 0;
 }
 //------------------------------------------------------------------------------
 // informa o número de mensagens atualmente na fila
 int mqueue_msgs (mqueue_t *queue){
   //Confere se não existe a fila indicada
-  if(!queue || !queue->msg_q)
+  if(!queue)
     return -1;
   //Retorna o tamanho da fila
+  lock();
   int tam = queue_size((queue_t *) queue->msg_q);
+  unlock();
   return tam;
 }
  
