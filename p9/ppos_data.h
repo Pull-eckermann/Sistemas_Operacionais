@@ -25,6 +25,7 @@ typedef struct task_t
   short quantum;                  // Valor do quantum de duração de cada tarefa
   short preemptable ;			        // pode ser preemptada?
   int despertar;                  // instante em que a tarefa suspensa deverá acordar
+  int exit_code;
   ucontext_t context ;			      // contexto armazenado da tarefa
 } task_t ;
 

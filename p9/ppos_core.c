@@ -251,6 +251,7 @@ void task_exit (int exit_code){
   
   printf("Task %d exit: execution time %d ms, processor time %d ms, %d activations\n",current->id,
                                         current->execution_time, current->processor_time, current->activations);
+  current->exit_code = exit_code;
   unlock();
   if(current->id != 1)   //Indica que a tarefa foi criada depois do dispatcher
     task_switch(&despachante);
@@ -304,7 +305,7 @@ int task_join (task_t *task){
     return -1;
   task_suspend(&task->suspensas); 
   unlock();
-  return(task->id);   //Retorna o codigo de encerramento da task...
+  return(task->exit_code);   //Retorna o codigo de encerramento da task...
 }                     //convencionado como o task->id (Talvez mude??)
 //------------------------------------------------------------------------------
 // suspende a tarefa corrente por t milissegundos
